@@ -1,11 +1,11 @@
-use std::fmt::Display;
+use std::{convert::Infallible, error::Error, fmt::Display};
 
 use dbus::arg;
 use dbus::arg::RefArg;
 use dbus::blocking;
 use dbus_derive::DbusArgs;
 use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 
 #[derive(FromPrimitive, ToPrimitive, Debug, Clone, Copy)]
 pub enum Transform {
@@ -19,10 +19,20 @@ pub enum Transform {
     Flipped270,
 }
 
+impl dbus_traits::DbusArg<u8> for Transform {
+    type Error = &'static str;
+    fn dbus_arg_try_from(self) -> Result<u8, Self::Error> {
+        Ok(self.to_u8().unwrap())
+    }
+    fn dbus_arg_try_into(value: u8) -> Result<Self, Self::Error> {
+        FromPrimitive::from_u8(value).ok_or("Could not parse transform")
+    }
+}
+
 /// A CRTC (CRT controller) is a logical monitor, ie a portion of the compositor coordinate space.
 /// It might correspond to multiple monitors, when in clone mode, but not that
 /// it is possible to implement clone mode also by setting different CRTCs to the same coordinates.
-#[derive(Debug)]
+#[derive(DbusArgs, Debug)]
 pub struct CrtController {
     /// The ID in the API of this CRTC
     pub id: u32,
@@ -40,43 +50,13 @@ pub struct CrtController {
     /// Note: the size of the mode will always correspond to the width and height of the CRTC
     pub mode_id: i32,
     /// The current transform (exspressed according to the wayland protocol)
+    #[dbus_arg(target_type = "u8")]
     pub transform: Transform,
     /// All posible transforms
     pub transforms: Vec<u32>,
     /// Other high-level properties that affect this CRTC; they are not necessarily reflected in the hardware.
     /// No property is specified in this version of the API
     _properties: arg::PropMap,
-}
-
-type CrtControllerTuple = (
-    u32,
-    i64,
-    i32,
-    i32,
-    i32,
-    i32,
-    i32,
-    u32,
-    Vec<u32>,
-    arg::PropMap,
-);
-
-impl From<CrtControllerTuple> for CrtController {
-    fn from(val: CrtControllerTuple) -> Self {
-        Self {
-            id: val.0,
-            winsys_id: val.1,
-            x: val.2,
-            y: val.3,
-            width: val.4,
-            height: val.5,
-            mode_id: val.6,
-            transform: FromPrimitive::from_u32(val.7)
-                .expect("Recieved transform out of wayland spec"),
-            transforms: val.8,
-            _properties: val.9,
-        }
-    }
 }
 
 impl Display for CrtController {
@@ -88,7 +68,7 @@ impl Display for CrtController {
     }
 }
 
-#[derive(Clone, Debug, DbusArgs)]
+#[derive(DbusArgs, Clone, Debug)]
 pub struct CrtControllerChange {
     /// The API ID from the corresponding GetResources() call
     id: u32,
@@ -107,7 +87,7 @@ pub struct CrtControllerChange {
 }
 
 /// An output represents a physical screen, connected somewhere to the computer. Floating connectors are not exposed in the API.
-#[derive(Clone, Debug)]
+#[derive(DbusArgs, Clone, Debug)]
 pub struct Output {
     /// The ID in the API
     pub id: u32,
@@ -125,33 +105,8 @@ pub struct Output {
     /// if you want to mirror two outputs that don't have each other in the clone list, you must configure two different CRTCs for the same geometry
     pub clone_ids: Vec<u32>,
     /// Other high-level properties that affect this output; they are not necessarily reflected in the hardware.
+    #[dbus_arg(target_type = "arg::PropMap")]
     pub props: OutputProperties,
-}
-
-type OutputTuple = (
-    u32,
-    i64,
-    i32,
-    Vec<u32>,
-    String,
-    Vec<u32>,
-    Vec<u32>,
-    arg::PropMap,
-);
-
-impl From<OutputTuple> for Output {
-    fn from(val: OutputTuple) -> Self {
-        Self {
-            id: val.0,
-            winsys_id: val.1,
-            crtc_id: val.2,
-            possible_crtc_ids: val.3,
-            connector_name: val.4,
-            mode_ids: val.5,
-            clone_ids: val.6,
-            props: val.7.into(),
-        }
-    }
 }
 
 impl Display for Output {
@@ -160,20 +115,13 @@ impl Display for Output {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(DbusArgs, Clone, Debug)]
 pub struct OutputChange {
     /// The API ID of the output to change
     pub id: u32,
     /// Properties whose value should be changed
+    #[dbus_arg(target_type = "arg::PropMap")]
     pub props: OutputProperties,
-}
-
-type OutputChangeTuple = (u32, arg::PropMap);
-
-impl From<OutputChange> for OutputChangeTuple {
-    fn from(val: OutputChange) -> Self {
-        (val.id, val.props.into())
-    }
 }
 
 /// Other high-level properties that affect this output; they are not necessarily reflected in the hardware.
@@ -195,59 +143,59 @@ pub struct OutputProperties {
     pub presentation: Option<bool>,
 }
 
-impl From<arg::PropMap> for OutputProperties {
-    fn from(val: arg::PropMap) -> Self {
-        Self {
-            vendor: val
-                .get("vendor")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            product: val
-                .get("product")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            serial: val
-                .get("serial")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            display_name: val
-                .get("display-name")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            backlight: val.get("backlight").and_then(|val| val.as_i64()),
-            primary: val
-                .get("primary")
-                .and_then(|val| val.as_i64().map(|num| num == 1)),
-            presentation: val
-                .get("presentation")
-                .and_then(|val| val.as_i64().map(|num| num == 1)),
-        }
-    }
-}
+impl dbus_traits::DbusArg<arg::PropMap> for OutputProperties {
+    type Error = Infallible;
 
-impl From<OutputProperties> for arg::PropMap {
-    fn from(val: OutputProperties) -> Self {
+    fn dbus_arg_try_from(self) -> Result<arg::PropMap, Self::Error> {
         let mut props = arg::PropMap::new();
-        val.vendor
+        self.vendor
             .map(|vendor| props.insert("vendor".to_string(), arg::Variant(Box::new(vendor))));
-        val.product
+        self.product
             .map(|product| props.insert("product".to_string(), arg::Variant(Box::new(product))));
-        val.serial
+        self.serial
             .map(|serial| props.insert("serial".to_string(), arg::Variant(Box::new(serial))));
-        val.display_name.map(|display_name| {
+        self.display_name.map(|display_name| {
             props.insert(
                 "display-name".to_string(),
                 arg::Variant(Box::new(display_name)),
             )
         });
-        val.backlight.map(|backlight| {
+        self.backlight.map(|backlight| {
             props.insert("backlight".to_string(), arg::Variant(Box::new(backlight)))
         });
-        val.primary
+        self.primary
             .map(|primary| props.insert("primary".to_string(), arg::Variant(Box::new(primary))));
-        val.presentation.map(|presentation| {
+        self.presentation.map(|presentation| {
             props.insert(
                 "presentation".to_string(),
                 arg::Variant(Box::new(presentation)),
             )
         });
-        props
+        Ok(props)
+    }
+
+    fn dbus_arg_try_into(value: arg::PropMap) -> Result<Self, Self::Error> {
+        Ok(Self {
+            vendor: value
+                .get("vendor")
+                .and_then(|val| val.as_str().map(str::to_string)),
+            product: value
+                .get("product")
+                .and_then(|val| val.as_str().map(str::to_string)),
+            serial: value
+                .get("serial")
+                .and_then(|val| val.as_str().map(str::to_string)),
+            display_name: value
+                .get("display-name")
+                .and_then(|val| val.as_str().map(str::to_string)),
+            backlight: value.get("backlight").and_then(|val| val.as_i64()),
+            primary: value
+                .get("primary")
+                .and_then(|val| val.as_i64().map(|num| num == 1)),
+            presentation: value
+                .get("presentation")
+                .and_then(|val| val.as_i64().map(|num| num == 1)),
+        })
     }
 }
 
@@ -278,7 +226,7 @@ impl Display for OutputProperties {
 /// A mode represents a set of parameters that are applied to each output, such as resolution and refresh rate.
 /// It is a separate object so that it can be referenced by CRTCs and outputs.
 /// Multiple outputs in the same CRTCs must all have the same mode.
-#[derive(Clone, Debug, DbusArgs)]
+#[derive(DbusArgs, Clone, Debug)]
 pub struct Mode {
     /// The ID in the API
     pub id: u32,
@@ -305,73 +253,38 @@ impl Display for Mode {
 }
 
 /// Current hardware layout
-#[derive(Debug)]
+#[derive(DbusArgs, Debug)]
 pub struct GetResourcesReturn {
     /// ID of current state of screen. Incremented by server to keep track of config changes
     pub serial: u32,
     /// Available CRTCs
+    #[dbus_arg(derived)]
     pub crtcs: Vec<CrtController>,
     /// Available outputs
+    #[dbus_arg(derived)]
     pub outputs: Vec<Output>,
     /// Available modes
+    #[dbus_arg(derived)]
     pub modes: Vec<Mode>,
     pub max_screen_width: i32,
     pub max_screen_height: i32,
 }
 
-type GetResourcesReturnTuple = (
-    u32,
-    Vec<CrtControllerTuple>,
-    Vec<OutputTuple>,
-    Vec<ModeTuple>,
-    i32,
-    i32,
-);
-
-impl From<GetResourcesReturnTuple> for GetResourcesReturn {
-    fn from(val: GetResourcesReturnTuple) -> Self {
-        GetResourcesReturn {
-            serial: val.0,
-            crtcs: val.1.into_iter().map(Into::into).collect(),
-            outputs: val.2.into_iter().map(Into::into).collect(),
-            modes: val.3.into_iter().map(Into::into).collect(),
-            max_screen_width: val.4,
-            max_screen_height: val.5,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(DbusArgs, Clone, Debug)]
 pub struct ApplyConfigurationArgs {
     serial: u32,
     persistent: bool,
     /// crtcs represents the new logical configuration, as a list of structures.
     /// Note: CRTCs not referenced in the array will be disabled.
+    #[dbus_arg(derived)]
     crtcs: Vec<CrtControllerChange>,
     /// outputs represent the output property changes.
     /// Note: both for CRTCs and outputs, properties not included in the dictionary will not be changed.
     ///
     /// Note: unrecognized properties will have no effect, but if the configuration change succeeds
     /// the property will be reported by the next GetResources() call, and if @persistent is true, it will also be saved to disk.
+    #[dbus_arg(derived)]
     outputs: Vec<OutputChange>,
-}
-
-type ApplyConfigurationArgsTuple = (
-    u32,
-    bool,
-    Vec<CrtControllerChangeTuple>,
-    Vec<OutputChangeTuple>,
-);
-
-impl From<ApplyConfigurationArgs> for ApplyConfigurationArgsTuple {
-    fn from(val: ApplyConfigurationArgs) -> Self {
-        (
-            val.serial,
-            val.persistent,
-            val.crtcs.into_iter().map(Into::into).collect(),
-            val.outputs.into_iter().map(Into::into).collect(),
-        )
-    }
 }
 
 pub trait OrgGnomeMutterDisplayConfig {
@@ -401,11 +314,16 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>> OrgGnome
     fn get_resources(&self) -> Result<GetResourcesReturn, dbus::Error> {
         let resources: GetResourcesReturnTuple =
             self.method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ())?;
-        Ok(resources.into())
+        resources.try_into().map_err(|err: Box<dyn Error>| {
+            dbus::Error::new_custom("InvalidReply", &err.to_string())
+        })
     }
 
     fn apply_configuration(&self, args: ApplyConfigurationArgs) -> Result<(), dbus::Error> {
-        let args: ApplyConfigurationArgsTuple = args.into();
+        let args: ApplyConfigurationArgsTuple =
+            args.try_into().map_err(|err: Box<dyn Error>| {
+                dbus::Error::new_custom("InvalidReply", &err.to_string())
+            })?;
         self.method_call("org.gnome.Mutter.DisplayConfig", "ApplyConfiguration", args)
     }
 

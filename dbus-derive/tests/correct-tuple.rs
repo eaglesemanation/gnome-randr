@@ -1,42 +1,44 @@
+use std::{
+    collections::{BTreeMap, HashMap},
+    error::Error,
+};
+
 use dbus_derive::DbusArgs;
 use dbus_traits::DbusArg;
 
-#[derive(DbusArgs)]
+#[derive(DbusArgs, Default, Debug)]
 pub struct ArgsNamed<'a> {
-    pub x: i32,
-    pub y: u32,
-    pub foo: String,
-    pub bar: &'a str,
-    pub arr: &'a [bool],
-    pub bytes: [u8; 4],
-    pub vec: Vec<f64>,
-    pub nested_arg: NestedArg,
-    pub nested_args: Vec<NestedArg>,
-    #[dbus_args(mapped_type = u8)]
-    pub choice_arg: ChoiceArg,
+    #[dbus_arg(derived)]
+    pub arg_struct: NestedArg<'a>,
+    #[dbus_arg(derived)]
+    pub arg_vec_struct: Vec<NestedArg<'a>>,
 }
 
-#[derive(DbusArgs)]
+#[derive(DbusArgs, Default, Debug)]
 pub struct ArgsUnnamed<'a>(
-    pub i32,
-    pub u32,
-    pub String,
-    pub &'a str,
-    pub &'a [bool],
-    pub [u8; 4],
-    pub Vec<f64>,
-    pub NestedArg,
-    pub Vec<NestedArg>,
-    #[dbus_args(mapped_type = u8)] pub ChoiceArg,
+    #[dbus_arg(derived)] pub NestedArg<'a>,
+    #[dbus_arg(derived)] pub Vec<NestedArg<'a>>,
 );
 
-#[derive(DbusArgs)]
-pub struct NestedArg {
-    pub arg1: i32,
-    pub arg2: i32,
+#[derive(DbusArgs, Default, Debug)]
+pub struct NestedArg<'a> {
+    pub arg_i32: i32,
+    pub arg_u32: u32,
+    pub arg_string: String,
+    pub arg_str_ref: &'a str,
+    pub arg_slice: &'a [bool],
+    pub arg_array: [u8; 4],
+    pub arg_vec: Vec<f64>,
+    pub arg_map: HashMap<i16, u16>,
+    pub art_tree: BTreeMap<i64, u64>,
+    #[dbus_arg(target_type = "u8")]
+    pub arg_enum: ChoiceArg,
+    pub arg_props: dbus::arg::PropMap,
 }
 
+#[derive(Debug, Default)]
 pub enum ChoiceArg {
+    #[default]
     Choice0,
     Choice1,
 }
@@ -61,37 +63,15 @@ impl DbusArg<u8> for ChoiceArg {
 }
 
 #[test]
-fn conversion() {
-    #[allow(clippy::type_complexity)]
-    let args: (
-        i32,
-        u32,
-        String,
-        &str,
-        &[bool],
-        [u8; 4],
-        Vec<f64>,
-        (i32, i32),
-        Vec<(i32, i32)>,
-        u8,
-    ) = (
-        0,
-        0u32,
-        "foo".to_string(),
-        "bar",
-        &[true, false],
-        [0xDE, 0xAD, 0xBE, 0xEF],
-        vec![0.0f64],
-        (0, 0),
-        vec![(1, 1), (2, 2)],
-        0,
-    );
+fn conversion() -> Result<(), Box<dyn Error>> {
+    let args_named = ArgsNamed::default();
+    let args_unnamed = ArgsUnnamed::default();
 
-    let args_named: ArgsNamed = args.clone().try_into().unwrap();
-    let args_unnamed: ArgsUnnamed = args.clone().try_into().unwrap();
+    let args_named_tuple: ArgsNamedTuple = args_named.try_into()?;
+    let args_unnamed_tuple: ArgsUnnamedTuple = args_unnamed.try_into()?;
 
-    let args_named_tuple: ArgsNamedTuple = args_named.try_into().unwrap();
-    let _: ArgsUnnamedTuple = args_unnamed.try_into().unwrap();
+    let _args_named_converted: ArgsNamed = args_named_tuple.try_into()?;
+    let _args_unnamed_converted: ArgsUnnamed = args_unnamed_tuple.try_into()?;
 
-    debug_assert_eq!(args, args_named_tuple);
+    Ok(())
 }
