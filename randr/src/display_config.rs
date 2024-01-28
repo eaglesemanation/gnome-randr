@@ -1,13 +1,12 @@
-use std::{convert::Infallible, error::Error, fmt::Display};
+use std::fmt::Display;
 
-use dbus::arg;
-use dbus::arg::RefArg;
 use dbus::blocking;
-use dbus_derive::DbusArgs;
+use dbus_derive::{DbusArgs, DbusEnum, DbusPropMap};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 
-#[derive(FromPrimitive, ToPrimitive, Debug, Clone, Copy)]
+#[derive(DbusEnum, FromPrimitive, ToPrimitive, Debug, Clone, Copy)]
+#[dbus_enum(as_type = "u32")]
 pub enum Transform {
     Normal = 0,
     Normal90,
@@ -19,13 +18,17 @@ pub enum Transform {
     Flipped270,
 }
 
-impl dbus_traits::DbusArg<u8> for Transform {
-    type Error = &'static str;
-    fn dbus_arg_try_from(self) -> Result<u8, Self::Error> {
-        Ok(self.to_u8().unwrap())
+impl From<Transform> for u32 {
+    fn from(value: Transform) -> Self {
+        value.to_u32().unwrap()
     }
-    fn dbus_arg_try_into(value: u8) -> Result<Self, Self::Error> {
-        FromPrimitive::from_u8(value).ok_or("Could not parse transform")
+}
+
+impl TryFrom<u32> for Transform {
+    type Error = &'static str;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        <Self as FromPrimitive>::from_u32(value).ok_or("Transform u32 representation out of bound")
     }
 }
 
@@ -50,13 +53,15 @@ pub struct CrtController {
     /// Note: the size of the mode will always correspond to the width and height of the CRTC
     pub mode_id: i32,
     /// The current transform (exspressed according to the wayland protocol)
-    #[dbus_arg(target_type = "u8")]
     pub transform: Transform,
     /// All posible transforms
     pub transforms: Vec<u32>,
-    /// Other high-level properties that affect this CRTC; they are not necessarily reflected in the hardware.
-    /// No property is specified in this version of the API
-    _properties: arg::PropMap,
+    //FIXME: si.read().ok()? immediately returns None if I uncomment this, even though PropMap
+    //should be present.
+    //
+    // Other high-level properties that affect this CRTC; they are not necessarily reflected in the hardware.
+    // No property is specified in this version of the API
+    //_properties: dbus::arg::PropMap,
 }
 
 impl Display for CrtController {
@@ -105,7 +110,6 @@ pub struct Output {
     /// if you want to mirror two outputs that don't have each other in the clone list, you must configure two different CRTCs for the same geometry
     pub clone_ids: Vec<u32>,
     /// Other high-level properties that affect this output; they are not necessarily reflected in the hardware.
-    #[dbus_arg(target_type = "arg::PropMap")]
     pub props: OutputProperties,
 }
 
@@ -120,12 +124,11 @@ pub struct OutputChange {
     /// The API ID of the output to change
     pub id: u32,
     /// Properties whose value should be changed
-    #[dbus_arg(target_type = "arg::PropMap")]
     pub props: OutputProperties,
 }
 
 /// Other high-level properties that affect this output; they are not necessarily reflected in the hardware.
-#[derive(Default, Clone, Debug)]
+#[derive(DbusPropMap, Default, Clone, Debug)]
 pub struct OutputProperties {
     /// The human readable name of the manufacturer
     pub vendor: Option<String>,
@@ -134,6 +137,7 @@ pub struct OutputProperties {
     /// The serial number of this particular hardware part
     pub serial: Option<String>,
     /// A human readable name of this output, to be shown in the UI
+    #[dbus_propmap(rename = "display-name")]
     pub display_name: Option<String>,
     /// The backlight value as a percentage (-1 if not supported)
     pub backlight: Option<i64>,
@@ -143,6 +147,7 @@ pub struct OutputProperties {
     pub presentation: Option<bool>,
 }
 
+/*
 impl dbus_traits::DbusArg<arg::PropMap> for OutputProperties {
     type Error = Infallible;
 
@@ -198,6 +203,7 @@ impl dbus_traits::DbusArg<arg::PropMap> for OutputProperties {
         })
     }
 }
+*/
 
 impl Display for OutputProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -238,6 +244,8 @@ pub struct Mode {
     pub height: u32,
     /// Refresh rate
     pub frequency: f64,
+    /// Mode flags as defined in xf86drmMode.h and randr.h
+    pub flags: u32,
 }
 
 impl Display for Mode {
@@ -258,13 +266,10 @@ pub struct GetResourcesReturn {
     /// ID of current state of screen. Incremented by server to keep track of config changes
     pub serial: u32,
     /// Available CRTCs
-    #[dbus_arg(derived)]
     pub crtcs: Vec<CrtController>,
     /// Available outputs
-    #[dbus_arg(derived)]
     pub outputs: Vec<Output>,
     /// Available modes
-    #[dbus_arg(derived)]
     pub modes: Vec<Mode>,
     pub max_screen_width: i32,
     pub max_screen_height: i32,
@@ -276,14 +281,12 @@ pub struct ApplyConfigurationArgs {
     persistent: bool,
     /// crtcs represents the new logical configuration, as a list of structures.
     /// Note: CRTCs not referenced in the array will be disabled.
-    #[dbus_arg(derived)]
     crtcs: Vec<CrtControllerChange>,
     /// outputs represent the output property changes.
     /// Note: both for CRTCs and outputs, properties not included in the dictionary will not be changed.
     ///
     /// Note: unrecognized properties will have no effect, but if the configuration change succeeds
     /// the property will be reported by the next GetResources() call, and if @persistent is true, it will also be saved to disk.
-    #[dbus_arg(derived)]
     outputs: Vec<OutputChange>,
 }
 
@@ -312,18 +315,10 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>> OrgGnome
     for blocking::Proxy<'a, C>
 {
     fn get_resources(&self) -> Result<GetResourcesReturn, dbus::Error> {
-        let resources: GetResourcesReturnTuple =
-            self.method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ())?;
-        resources.try_into().map_err(|err: Box<dyn Error>| {
-            dbus::Error::new_custom("InvalidReply", &err.to_string())
-        })
+        self.method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ())
     }
 
     fn apply_configuration(&self, args: ApplyConfigurationArgs) -> Result<(), dbus::Error> {
-        let args: ApplyConfigurationArgsTuple =
-            args.try_into().map_err(|err: Box<dyn Error>| {
-                dbus::Error::new_custom("InvalidReply", &err.to_string())
-            })?;
         self.method_call("org.gnome.Mutter.DisplayConfig", "ApplyConfiguration", args)
     }
 

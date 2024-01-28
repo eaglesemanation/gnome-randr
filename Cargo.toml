@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
 
-members = [ "dbus-derive", "dbus-traits", "randr" ]
+members = [ "dbus-derive", "randr" ]

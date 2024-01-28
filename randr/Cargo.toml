@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.79"
 dbus = "0.9.7"
-dbus-derive = {path = "../dbus-derive"}
-dbus-traits = { path = "../dbus-traits" }
+dbus-derive = { path = "../dbus-derive" }
 num-derive = "0.4.1"
 num-traits = "0.2.17"

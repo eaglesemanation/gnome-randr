@@ -1,0 +1,18 @@
+{
+    "version": "2",
+    "configurations": [
+        {
+            "name": "Run randr",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "build",
+                    "-p",
+                    "gnome-randr"
+                ]
+            },
+            "sourceLanguages": ["rust"]
+        }
+    ]
+}

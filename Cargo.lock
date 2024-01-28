@@ -75,19 +75,11 @@ version = "0.1.0"
 dependencies = [
  "darling",
  "dbus",
- "dbus-traits",
  "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn 2.0.48",
  "trybuild",
-]
-
-[[package]]
-name = "dbus-traits"
-version = "0.1.0"
-dependencies = [
- "dbus",
 ]
 
 [[package]]
@@ -115,7 +107,6 @@ dependencies = [
  "anyhow",
  "dbus",
  "dbus-derive",
- "dbus-traits",
  "num-derive",
  "num-traits",
 ]
