@@ -147,64 +147,6 @@ pub struct OutputProperties {
     pub presentation: Option<bool>,
 }
 
-/*
-impl dbus_traits::DbusArg<arg::PropMap> for OutputProperties {
-    type Error = Infallible;
-
-    fn dbus_arg_try_from(self) -> Result<arg::PropMap, Self::Error> {
-        let mut props = arg::PropMap::new();
-        self.vendor
-            .map(|vendor| props.insert("vendor".to_string(), arg::Variant(Box::new(vendor))));
-        self.product
-            .map(|product| props.insert("product".to_string(), arg::Variant(Box::new(product))));
-        self.serial
-            .map(|serial| props.insert("serial".to_string(), arg::Variant(Box::new(serial))));
-        self.display_name.map(|display_name| {
-            props.insert(
-                "display-name".to_string(),
-                arg::Variant(Box::new(display_name)),
-            )
-        });
-        self.backlight.map(|backlight| {
-            props.insert("backlight".to_string(), arg::Variant(Box::new(backlight)))
-        });
-        self.primary
-            .map(|primary| props.insert("primary".to_string(), arg::Variant(Box::new(primary))));
-        self.presentation.map(|presentation| {
-            props.insert(
-                "presentation".to_string(),
-                arg::Variant(Box::new(presentation)),
-            )
-        });
-        Ok(props)
-    }
-
-    fn dbus_arg_try_into(value: arg::PropMap) -> Result<Self, Self::Error> {
-        Ok(Self {
-            vendor: value
-                .get("vendor")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            product: value
-                .get("product")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            serial: value
-                .get("serial")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            display_name: value
-                .get("display-name")
-                .and_then(|val| val.as_str().map(str::to_string)),
-            backlight: value.get("backlight").and_then(|val| val.as_i64()),
-            primary: value
-                .get("primary")
-                .and_then(|val| val.as_i64().map(|num| num == 1)),
-            presentation: value
-                .get("presentation")
-                .and_then(|val| val.as_i64().map(|num| num == 1)),
-        })
-    }
-}
-*/
-
 impl Display for OutputProperties {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
