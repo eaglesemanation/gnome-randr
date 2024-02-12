@@ -4,30 +4,28 @@ use std::{
 };
 
 use dbus::arg::Arg;
-use dbus_derive::{DbusArgs, DbusEnum, DbusPropMap};
+use dbus_derive::{DbusEnum, DbusPropMap, DbusStruct};
 
-#[derive(DbusArgs, Default, Debug)]
+#[derive(DbusStruct, Default, Debug)]
 pub struct ArgsNamed {
     pub arg_struct: NestedArg,
     pub arg_vec_struct: Vec<NestedArg>,
 }
 
-#[derive(DbusArgs, Default, Debug)]
+#[derive(DbusStruct, Default, Debug)]
 pub struct ArgsNamedWrapper(pub NestedArg);
 
-#[derive(DbusArgs, Default, Debug)]
+#[derive(DbusStruct, Default, Debug)]
 pub struct ArgsUnnamed(pub NestedArg, pub Vec<NestedArg>);
 
-#[derive(DbusArgs, Default, Debug)]
+#[derive(DbusStruct, Default, Debug)]
 pub struct ArgsUnnamedWrapper(pub NestedArg);
 
-#[derive(DbusArgs, Default, Debug)]
+#[derive(DbusStruct, Default, Debug)]
 pub struct NestedArg {
     pub arg_i32: i32,
     pub arg_u32: u32,
     pub arg_string: String,
-    //pub arg_str_ref: &'a str,
-    //pub arg_slice: &'a [bool],
     pub arg_vec: Vec<f64>,
     pub arg_map: HashMap<i16, u16>,
     pub arg_tree: BTreeMap<i64, u64>,
@@ -71,12 +69,14 @@ pub struct PropsArg {
 }
 
 #[test]
-fn conversion() -> Result<(), Box<dyn Error>> {
+fn signature() -> Result<(), Box<dyn Error>> {
     let nested_sig = "(iusada{nq}a{xt}ya{sv})".to_string();
+    let wrapped_sig = format!("({nested_sig})");
     let full_sig = format!("({nested_sig}a{nested_sig})");
+
     assert_eq!(nested_sig, NestedArg::signature().to_string());
-    assert_eq!(nested_sig, ArgsNamedWrapper::signature().to_string());
-    assert_eq!(nested_sig, ArgsUnnamedWrapper::signature().to_string());
+    assert_eq!(wrapped_sig, ArgsNamedWrapper::signature().to_string());
+    assert_eq!(wrapped_sig, ArgsUnnamedWrapper::signature().to_string());
     assert_eq!(full_sig, ArgsNamed::signature().to_string());
     assert_eq!(full_sig, ArgsUnnamed::signature().to_string());
     Ok(())

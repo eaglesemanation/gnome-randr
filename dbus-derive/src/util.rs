@@ -1,8 +1,16 @@
 use darling::ast::Style;
 use proc_macro2::{Span, TokenStream};
-use proc_macro_error::abort;
+use proc_macro_error::{abort, emit_error};
 use quote::{format_ident, quote, ToTokens};
-use syn::{Ident, Type};
+use syn::{spanned::Spanned, DeriveInput, Ident, Type};
+
+pub fn derive_input_style_span(input: DeriveInput) -> Span {
+    match input.data {
+        syn::Data::Enum(e) => e.enum_token.span(),
+        syn::Data::Struct(s) => s.struct_token.span(),
+        syn::Data::Union(u) => u.union_token.span(),
+    }
+}
 
 /// Returns struct constructor that is appropriate for given struct style
 pub fn fields_to_constructor(span: &Span, style: &Style, var_names: &[Ident]) -> TokenStream {
@@ -41,35 +49,47 @@ pub fn fields_to_var_idents(
 }
 
 /// Extracts a generic argument idx from ty and parses it as syn::Type
-pub fn ty_generic_to_ty_contained(ty: &Type, idx: usize) -> Type {
+/// Emits compilation error and returns None if containted type cannot be extracted
+pub fn ty_generic_to_ty_contained(ty: &Type, container_name: &str, idx: usize) -> Option<Type> {
+    let err_str = "dbus_derive - Will fail in case field is missing from dbus::PropMap".to_string();
+    let hint_str = format!("Try this - {container_name}<{}T>", "_, ".repeat(idx));
+
     match ty {
         Type::Path(ty_path) => {
             let segments = &ty_path.path.segments;
             if segments.len() < idx + 1 {
-                abort!(ty, "Path should not be empty");
+                emit_error!(ty, err_str; hint=hint_str);
+                return None;
             }
             let segment = segments.last().unwrap(/* Verified above */);
+
+            let hint_str = format!(
+                "Try this - {container_name}<{}{}>",
+                "_, ".repeat(idx),
+                segment.ident
+            );
+            if segment.ident != container_name {
+                emit_error!(ty, err_str; hint=hint_str);
+                return None;
+            }
             let args = match &segment.arguments {
                 syn::PathArguments::AngleBracketed(args) => args,
-                _ => abort!(ty, "No generic arguments, expected at least {}", idx + 1),
+                _ => {
+                    emit_error!(ty, err_str; hint=hint_str);
+                    return None;
+                }
             };
             let Some(arg_contained) = args.args.iter().nth(idx) else {
-                abort!(
-                    ty,
-                    "Not enough generic arguments, expected at least {}",
-                    idx + 1
-                );
+                emit_error!(ty, err_str; hint=hint_str);
+                return None;
             };
             let Ok(ty_contained) = syn::parse::<Type>(arg_contained.to_token_stream().into())
             else {
-                abort!(
-                    ty,
-                    "Argument {} is not a valid type",
-                    arg_contained.to_token_stream().to_string()
-                );
+                emit_error!(ty, err_str; hint=hint_str);
+                return None;
             };
-            ty_contained
+            Some(ty_contained)
         }
-        _ => abort!(ty, "Expected to be a generic type"),
+        _ => None,
     }
 }

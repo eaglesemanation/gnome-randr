@@ -1,6 +1,6 @@
 use darling::FromDeriveInput;
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote, quote_spanned};
 use syn::{GenericParam, Lifetime, LifetimeParam, Type};
 
 #[derive(Debug, FromDeriveInput)]
@@ -27,7 +27,15 @@ pub fn derive_enum(input: DbusEnum) -> TokenStream {
     generics_with_lt.params.push(GenericParam::Lifetime(ltp));
     let (impl_with_lt, _, _) = generics_with_lt.split_for_impl();
 
+    // Generate a stub struct that will throw compile-time errors if trait bounds are not fullfiled
+    let assert_struct_ident = format_ident!("_AssertDbusEnum{}", ident);
+    let assert_struct = quote_spanned!(ident.span() =>
+        struct #assert_struct_ident where #as_type: ::core::convert::From<#ident>, #ident: ::core::convert::TryFrom<#as_type>;
+    );
+
     quote! {
+        #assert_struct
+
         #[automatically_derived]
         impl #impl_generics ::dbus::arg::Arg for #input_name #where_clause {
             const ARG_TYPE: ::dbus::arg::ArgType = <#as_type as ::dbus::arg::Arg>::ARG_TYPE;

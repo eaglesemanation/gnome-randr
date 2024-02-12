@@ -45,10 +45,15 @@ pub fn derive_propmap(input: DbusPropmap) -> TokenStream {
     let field_idents: Vec<_> = data.iter().map(|f| f.ident.clone()).collect();
     let field_types: Vec<_> = data
         .iter()
-        .map(|f| ty_generic_to_ty_contained(&f.ty, 0))
+        .filter_map(|f| ty_generic_to_ty_contained(&f.ty, "Option", 0))
         .collect();
     let var_names = fields_to_var_idents(&ident.span(), &data.style, &field_idents);
     let self_constructor = fields_to_constructor(&ident.span(), &data.style, &var_names);
+
+    // Could not figure out correct type for every field of target struct, bail out
+    if field_types.len() < data.len() {
+        return TokenStream::new();
+    }
 
     // Check if field has a rename attribute on it, if so - use provided name to access hashmap
     let var_name_strs: Vec<_> = var_names

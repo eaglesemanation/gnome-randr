@@ -1,12 +1,12 @@
-use dbus_derive::DbusArgs;
+use dbus_derive::DbusStruct;
 
-#[derive(DbusArgs)]
+#[derive(DbusStruct)]
 pub enum Arg {
     Opt1,
     Opt2,
 }
 
-#[derive(DbusArgs)]
+#[derive(DbusStruct)]
 pub struct Arg3;
 
 fn main() {}
