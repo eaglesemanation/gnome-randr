@@ -32,31 +32,6 @@ error[E0277]: the trait bound `DoesntDeriveDbusStruct: Append` is not satisfied
             u64
           and $N others
 
-error[E0277]: the trait bound `DoesntDeriveDbusStruct: Append` is not satisfied
- --> tests/ui/field-not-arg.rs:6:9
-  |
-6 |     pub doesnt_implement: DoesntDeriveDbusStruct,
-  |         ^^^^^^^^^^^^^^^^  ---------------------- required by a bound introduced by this call
-  |         |
-  |         the trait `Append` is not implemented for `DoesntDeriveDbusStruct`
-  |
-  = help: the following other types implement trait `Append`:
-            bool
-            i16
-            i32
-            i64
-            u8
-            u16
-            u32
-            u64
-          and $N others
-  = note: required for `&DoesntDeriveDbusStruct` to implement `Append`
-note: required by a bound in `IterAppend::<'a>::append`
- --> $CARGO/dbus-0.9.7/src/arg/mod.rs
-  |
-  |     pub fn append<T: Append>(&mut self, a: T) { a.append(self) }
-  |                      ^^^^^^ required by this bound in `IterAppend::<'a>::append`
-
 error[E0277]: the trait bound `DoesntDeriveDbusStruct: Arg` is not satisfied
  --> tests/ui/field-not-arg.rs:6:27
   |

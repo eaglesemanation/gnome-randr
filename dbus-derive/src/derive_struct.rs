@@ -41,8 +41,6 @@ pub fn derive_struct(input: DbusStruct) -> TokenStream {
     generics_with_lt.params.push(GenericParam::Lifetime(ltp));
     let (impl_with_lt, _, _) = generics_with_lt.split_for_impl();
 
-    let strs = core::iter::repeat(quote!(&'static str)).take(data.len());
-
     // Create a format string for format!() macro in Arg trait implementation
     let sig_format = format!("({})", "{}".to_string().repeat(data.len()));
 
@@ -52,11 +50,9 @@ pub fn derive_struct(input: DbusStruct) -> TokenStream {
     let struct_constructor = fields_to_constructor(&ident.span(), &data.style, &var_idents);
 
     // Generating TokenStreams with calls to methods to attach correct field spans
-    let (mut iter_get_vars, mut iter_append_vars, mut iter_read_vars) = (vec![], vec![], vec![]);
+    let mut iter_get_vars = vec![];
     for (f_id, f_ty) in var_idents.iter().zip(field_types.iter()) {
         iter_get_vars.push(quote_spanned!(f_ty.span() => let #f_id = si.read().ok()?;));
-        iter_append_vars.push(quote_spanned!(f_ty.span() => ia.append(#f_id);));
-        iter_read_vars.push(quote_spanned!(f_ty.span() => let #f_id = i.read()?;))
     }
 
     quote! {
@@ -73,28 +69,10 @@ pub fn derive_struct(input: DbusStruct) -> TokenStream {
         }
 
         #[automatically_derived]
-        impl #impl_generics ::dbus::arg::ArgAll for #input_name #where_clause {
-            type strs = ( #(#strs),* );
-
-            fn strs_sig<F: FnMut(&'static str, ::dbus::Signature<'static>)>(strs: Self::strs, mut f: F) {
-                let (#(#var_idents),*) = strs;
-                #(f(#var_idents, <#field_types as ::dbus::arg::Arg>::signature());)*
-            }
-        }
-
-        #[automatically_derived]
         impl #impl_generics ::dbus::arg::Append for #input_name #where_clause {
             fn append_by_ref(&self, ia: &mut ::dbus::arg::IterAppend) {
                 let #struct_constructor = self;
                 ia.append_struct(|s| { #( <#field_types as ::dbus::arg::Append>::append_by_ref(#var_idents, s); )* });
-            }
-        }
-
-        #[automatically_derived]
-        impl #impl_generics ::dbus::arg::AppendAll for #input_name #where_clause {
-            fn append(&self, ia: &mut ::dbus::arg::IterAppend) {
-                let #struct_constructor = self;
-                #(#iter_append_vars)*
             }
         }
 
@@ -104,14 +82,6 @@ pub fn derive_struct(input: DbusStruct) -> TokenStream {
                 let mut si = i.recurse(::dbus::arg::ArgType::Struct)?;
                 #(#iter_get_vars)*
                 ::core::option::Option::Some(#struct_constructor)
-            }
-        }
-
-        #[automatically_derived]
-        impl #impl_generics ::dbus::arg::ReadAll for #input_name #where_clause {
-            fn read(i: &mut ::dbus::arg::Iter) -> ::core::result::Result<Self, ::dbus::arg::TypeMismatchError> {
-                #(#iter_read_vars)*
-                ::core::result::Result::Ok(#struct_constructor)
             }
         }
     }
