@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 use dbus::blocking;
-use dbus_derive::{DbusArgs, DbusEnum, DbusPropMap};
+use dbus_derive::{DbusArgs, DbusEnum, DbusPropMap, DbusStruct};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 
@@ -33,9 +33,9 @@ impl TryFrom<u32> for Transform {
 }
 
 /// A CRTC (CRT controller) is a logical monitor, ie a portion of the compositor coordinate space.
-/// It might correspond to multiple monitors, when in clone mode, but not that
+/// It might correspond to multiple monitors, when in clone mode, but note that
 /// it is possible to implement clone mode also by setting different CRTCs to the same coordinates.
-#[derive(DbusArgs, Debug)]
+#[derive(DbusStruct, Clone, Debug)]
 pub struct CrtController {
     /// The ID in the API of this CRTC
     pub id: u32,
@@ -64,35 +64,26 @@ pub struct CrtController {
     //_properties: dbus::arg::PropMap,
 }
 
-impl Display for CrtController {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "id {}: ({},{}), {}x{}, {:?}",
-            self.id, self.x, self.y, self.width, self.height, self.transform
-        ))
-    }
-}
-
-#[derive(DbusArgs, Clone, Debug)]
+#[derive(DbusStruct, Clone, Debug)]
 pub struct CrtControllerChange {
     /// The API ID from the corresponding GetResources() call
-    id: u32,
+    pub id: u32,
     /// The API ID of the new mode to configure the CRTC with, or -1 if the CRTC should be disabled
-    mode_id: i32,
+    pub mode_id: i32,
     /// The new coordinates of the top left corner.
     /// The geometry will be completed with the size information from new_mode.
-    x: i32,
+    pub x: i32,
     /// The new coordinates of the top left corner.
     /// The geometry will be completed with the size information from new_mode.
-    y: i32,
+    pub y: i32,
     /// The desired transform
-    transform: u32,
+    pub transform: u32,
     /// The API ID of outputs that should be assigned to this CRTC
-    output_ids: Vec<u32>,
+    pub output_ids: Vec<u32>,
 }
 
 /// An output represents a physical screen, connected somewhere to the computer. Floating connectors are not exposed in the API.
-#[derive(DbusArgs, Clone, Debug)]
+#[derive(DbusStruct, Clone, Debug)]
 pub struct Output {
     /// The ID in the API
     pub id: u32,
@@ -113,13 +104,7 @@ pub struct Output {
     pub props: OutputProperties,
 }
 
-impl Display for Output {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("id {}: {}", self.id, self.props))
-    }
-}
-
-#[derive(DbusArgs, Clone, Debug)]
+#[derive(DbusStruct, Clone, Debug)]
 pub struct OutputChange {
     /// The API ID of the output to change
     pub id: u32,
@@ -174,7 +159,7 @@ impl Display for OutputProperties {
 /// A mode represents a set of parameters that are applied to each output, such as resolution and refresh rate.
 /// It is a separate object so that it can be referenced by CRTCs and outputs.
 /// Multiple outputs in the same CRTCs must all have the same mode.
-#[derive(DbusArgs, Clone, Debug)]
+#[derive(DbusStruct, Clone, Debug)]
 pub struct Mode {
     /// The ID in the API
     pub id: u32,
@@ -190,20 +175,8 @@ pub struct Mode {
     pub flags: u32,
 }
 
-impl Display for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "id: {}, {}x{}@{}",
-            self.id,
-            self.width,
-            self.height,
-            self.frequency.round()
-        ))
-    }
-}
-
 /// Current hardware layout
-#[derive(DbusArgs, Debug)]
+#[derive(DbusArgs, Clone, Debug)]
 pub struct GetResourcesReturn {
     /// ID of current state of screen. Incremented by server to keep track of config changes
     pub serial: u32,
@@ -219,72 +192,79 @@ pub struct GetResourcesReturn {
 
 #[derive(DbusArgs, Clone, Debug)]
 pub struct ApplyConfigurationArgs {
-    serial: u32,
-    persistent: bool,
+    pub serial: u32,
+    pub persistent: bool,
     /// crtcs represents the new logical configuration, as a list of structures.
     /// Note: CRTCs not referenced in the array will be disabled.
-    crtcs: Vec<CrtControllerChange>,
+    pub crtcs: Vec<CrtControllerChange>,
     /// outputs represent the output property changes.
     /// Note: both for CRTCs and outputs, properties not included in the dictionary will not be changed.
     ///
     /// Note: unrecognized properties will have no effect, but if the configuration change succeeds
     /// the property will be reported by the next GetResources() call, and if @persistent is true, it will also be saved to disk.
-    outputs: Vec<OutputChange>,
+    pub outputs: Vec<OutputChange>,
 }
 
-pub trait OrgGnomeMutterDisplayConfig {
-    fn get_resources(&self) -> Result<GetResourcesReturn, dbus::Error>;
-    fn apply_configuration(&self, args: ApplyConfigurationArgs) -> Result<(), dbus::Error>;
-    fn change_backlight(&self, serial: u32, output: u32, value: i32) -> Result<(), dbus::Error>;
-    fn get_crtc_gamma(
-        &self,
-        serial: u32,
-        crtc: u32,
-    ) -> Result<(Vec<u16>, Vec<u16>, Vec<u16>), dbus::Error>;
-    fn set_crtc_gamma(
-        &self,
-        serial: u32,
-        crtc: u32,
-        red: Vec<u16>,
-        green: Vec<u16>,
-        blue: Vec<u16>,
-    ) -> Result<(), dbus::Error>;
-    fn power_save_mode(&self) -> Result<i32, dbus::Error>;
-    fn set_power_save_mode(&self, value: i32) -> Result<(), dbus::Error>;
+#[derive(DbusArgs, Clone, Debug)]
+pub struct ChangeBacklightArgs {
+    pub serial: u32,
+    /// the API id of the output
+    pub output: u32,
+    /// the new backlight value
+    pub value: i32,
 }
 
-impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>> OrgGnomeMutterDisplayConfig
-    for blocking::Proxy<'a, C>
-{
-    fn get_resources(&self) -> Result<GetResourcesReturn, dbus::Error> {
-        self.method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ())
-    }
+#[derive(DbusArgs, Clone, Debug)]
+pub struct CrtcGamma {
+    /// red gamma ramp
+    pub red: Vec<u16>,
+    /// green gamma ramp
+    pub green: Vec<u16>,
+    /// blue gamma ramp
+    pub blue: Vec<u16>,
+}
 
-    fn apply_configuration(&self, args: ApplyConfigurationArgs) -> Result<(), dbus::Error> {
-        self.method_call("org.gnome.Mutter.DisplayConfig", "ApplyConfiguration", args)
-    }
+pub struct OrgGnomeMutterDisplayConfig<'a, C> {
+    proxy: blocking::Proxy<'a, C>,
+}
 
-    fn change_backlight(&self, serial: u32, output: u32, value: i32) -> Result<(), dbus::Error> {
-        self.method_call(
+pub type DisplayConfig<'a, 'b> = OrgGnomeMutterDisplayConfig<'a, &'b blocking::Connection>;
+
+impl<'a> DisplayConfig<'_, 'a> {
+    pub fn new(conn: &'a blocking::Connection) -> Self {
+        let proxy = blocking::Proxy::new(
             "org.gnome.Mutter.DisplayConfig",
-            "ChangeBacklight",
-            (serial, output, value),
-        )
+            "/org/gnome/Mutter/DisplayConfig",
+            Duration::from_millis(5000),
+            conn,
+        );
+        Self { proxy }
     }
 
-    fn get_crtc_gamma(
-        &self,
-        serial: u32,
-        crtc_id: u32,
-    ) -> Result<(Vec<u16>, Vec<u16>, Vec<u16>), dbus::Error> {
-        self.method_call(
+    pub fn get_resources(&self) -> Result<GetResourcesReturn, dbus::Error> {
+        self.proxy
+            .method_call("org.gnome.Mutter.DisplayConfig", "GetResources", ())
+    }
+
+    pub fn apply_configuration(&self, args: ApplyConfigurationArgs) -> Result<(), dbus::Error> {
+        self.proxy
+            .method_call("org.gnome.Mutter.DisplayConfig", "ApplyConfiguration", args)
+    }
+
+    pub fn change_backlight(&self, args: ChangeBacklightArgs) -> Result<(), dbus::Error> {
+        self.proxy
+            .method_call("org.gnome.Mutter.DisplayConfig", "ChangeBacklight", args)
+    }
+
+    pub fn get_crtc_gamma(&self, serial: u32, crtc: u32) -> Result<CrtcGamma, dbus::Error> {
+        self.proxy.method_call(
             "org.gnome.Mutter.DisplayConfig",
             "GetCrtcGamma",
-            (serial, crtc_id),
+            (serial, crtc),
         )
     }
 
-    fn set_crtc_gamma(
+    pub fn set_crtc_gamma(
         &self,
         serial: u32,
         crtc: u32,
@@ -292,24 +272,24 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>> OrgGnome
         green: Vec<u16>,
         blue: Vec<u16>,
     ) -> Result<(), dbus::Error> {
-        self.method_call(
+        self.proxy.method_call(
             "org.gnome.Mutter.DisplayConfig",
             "SetCrtcGamma",
             (serial, crtc, red, green, blue),
         )
     }
 
-    fn power_save_mode(&self) -> Result<i32, dbus::Error> {
-        <Self as blocking::stdintf::org_freedesktop_dbus::Properties>::get(
-            self,
+    pub fn power_save_mode(&self) -> Result<i32, dbus::Error> {
+        blocking::stdintf::org_freedesktop_dbus::Properties::get(
+            &self.proxy,
             "org.gnome.Mutter.DisplayConfig",
             "PowerSaveMode",
         )
     }
 
-    fn set_power_save_mode(&self, value: i32) -> Result<(), dbus::Error> {
-        <Self as blocking::stdintf::org_freedesktop_dbus::Properties>::set(
-            self,
+    pub fn set_power_save_mode(&self, value: i32) -> Result<(), dbus::Error> {
+        blocking::stdintf::org_freedesktop_dbus::Properties::set(
+            &self.proxy,
             "org.gnome.Mutter.DisplayConfig",
             "PowerSaveMode",
             value,

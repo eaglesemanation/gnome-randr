@@ -9,5 +9,8 @@ edition = "2021"
 anyhow = "1.0.79"
 dbus = "0.9.7"
 dbus-derive = { path = "../dbus-derive" }
+derive_builder = "0.20.0"
+lexopt = "0.3.0"
 num-derive = "0.4.1"
 num-traits = "0.2.17"
+regex = "1.10.3"
