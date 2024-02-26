@@ -3,23 +3,17 @@ use std::{
     error::Error,
 };
 
-use dbus::arg::Arg;
-use dbus_derive::{DbusEnum, DbusPropMap, DbusStruct};
+use dbus::arg::{Arg, ArgAll};
+use dbus_derive::{DbusArgs, DbusEnum, DbusPropMap, DbusStruct};
 
-#[derive(DbusStruct, Default, Debug)]
+#[derive(DbusStruct, DbusArgs, Default, Debug)]
 pub struct ArgsNamed {
     pub arg_struct: NestedArg,
     pub arg_vec_struct: Vec<NestedArg>,
 }
 
-#[derive(DbusStruct, Default, Debug)]
-pub struct ArgsNamedWrapper(pub NestedArg);
-
-#[derive(DbusStruct, Default, Debug)]
+#[derive(DbusStruct, DbusArgs, Default, Debug)]
 pub struct ArgsUnnamed(pub NestedArg, pub Vec<NestedArg>);
-
-#[derive(DbusStruct, Default, Debug)]
-pub struct ArgsUnnamedWrapper(pub NestedArg);
 
 #[derive(DbusStruct, Default, Debug)]
 pub struct NestedArg {
@@ -71,13 +65,23 @@ pub struct PropsArg {
 #[test]
 fn signature() -> Result<(), Box<dyn Error>> {
     let nested_sig = "(iusada{nq}a{xt}ya{sv})".to_string();
-    let wrapped_sig = format!("({nested_sig})");
-    let full_sig = format!("({nested_sig}a{nested_sig})");
+    let full_sig = format!("{nested_sig}a{nested_sig}");
+    let full_sig_struct = format!("({full_sig})");
+
+    let strs = ("arg_struct", "arg_vec_structs");
+    let mut args_named_argall_sig = String::new();
+    ArgsNamed::strs_sig(strs, |_, sig| {
+        args_named_argall_sig += &sig.to_string();
+    });
+    let mut args_unnamed_argall_sig = String::new();
+    ArgsUnnamed::strs_sig(strs, |_, sig| {
+        args_unnamed_argall_sig += &sig.to_string();
+    });
 
     assert_eq!(nested_sig, NestedArg::signature().to_string());
-    assert_eq!(wrapped_sig, ArgsNamedWrapper::signature().to_string());
-    assert_eq!(wrapped_sig, ArgsUnnamedWrapper::signature().to_string());
-    assert_eq!(full_sig, ArgsNamed::signature().to_string());
-    assert_eq!(full_sig, ArgsUnnamed::signature().to_string());
+    assert_eq!(full_sig, args_named_argall_sig);
+    assert_eq!(full_sig, args_unnamed_argall_sig);
+    assert_eq!(full_sig_struct, ArgsNamed::signature().to_string());
+    assert_eq!(full_sig_struct, ArgsUnnamed::signature().to_string());
     Ok(())
 }

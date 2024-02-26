@@ -47,13 +47,14 @@ pub fn derive_struct(input: DbusStruct) -> TokenStream {
     let field_idents: Vec<_> = data.iter().map(|f| f.ident.clone()).collect();
     let field_types: Vec<_> = data.iter().map(|f| f.ty.clone()).collect();
     let var_idents = fields_to_var_idents(&ident.span(), &data.style, &field_idents);
+    let field_iterator = data.iter().zip(var_idents.iter());
+
     let struct_constructor = fields_to_constructor(&ident.span(), &data.style, &var_idents);
 
-    // Generating TokenStreams with calls to methods to attach correct field spans
-    let mut iter_get_vars = vec![];
-    for (f_id, f_ty) in var_idents.iter().zip(field_types.iter()) {
-        iter_get_vars.push(quote_spanned!(f_ty.span() => let #f_id = si.read().ok()?;));
-    }
+    // Generating this here instead of inserting directly into quote! to attach correct span
+    let get_vars = field_iterator
+        .clone()
+        .map(|(f, var_id)| quote_spanned!(f.ty.span() => let #var_id = si.read().ok()?;));
 
     quote! {
         #[automatically_derived]
@@ -80,7 +81,7 @@ pub fn derive_struct(input: DbusStruct) -> TokenStream {
         impl #impl_with_lt ::dbus::arg::Get<#lt> for #input_name #where_clause {
             fn get(i: &mut ::dbus::arg::Iter<#lt>) -> ::core::option::Option<Self> {
                 let mut si = i.recurse(::dbus::arg::ArgType::Struct)?;
-                #(#iter_get_vars)*
+                #(#get_vars)*
                 ::core::option::Option::Some(#struct_constructor)
             }
         }

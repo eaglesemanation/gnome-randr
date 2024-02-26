@@ -53,7 +53,7 @@ pub fn derive_args(input: DbusArgs) -> TokenStream {
         impl #impl_generics ::dbus::arg::ArgAll for #input_name #where_clause {
             type strs = ( #(#strs),* );
 
-            fn strs_sig<F: FnMut(&'static str, ::dbus::Signature<'static>)>(strs: Self::strs, mut f: F) {
+            fn strs_sig<F: ::std::ops::FnMut(&'static str, ::dbus::Signature<'static>)>(strs: Self::strs, mut f: F) {
                 let (#(#var_idents),*) = strs;
                 #(f(#var_idents, <#field_types as ::dbus::arg::Arg>::signature());)*
             }

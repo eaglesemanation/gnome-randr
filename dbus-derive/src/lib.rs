@@ -1,3 +1,9 @@
+#![warn(missing_docs)]
+
+//! Derive macros for [dbus] library
+//!
+//! Simplifies definition of complex dbus interfaces
+
 mod derive_args;
 mod derive_enum;
 mod derive_propmap;
@@ -14,6 +20,33 @@ use crate::derive_propmap::{derive_propmap, DbusPropmap};
 use crate::derive_struct::{derive_struct, DbusStruct};
 use crate::util::derive_input_style_span;
 
+/// Implements [`Arg`], [`Get`] and [`Append`] for an arbitrary struct.
+///
+/// Expects every field type to implement [`Arg`], [`Get`] and [`Append`].
+///
+/// # Examples
+/// ```
+/// use dbus::arg::Arg;
+/// use dbus_derive::DbusStruct;
+///
+/// // Taken from org.freedesktop.ColorHelper UpdateGamma signal
+/// #[derive(DbusStruct)]
+/// struct Gamma {
+///     red: f64,
+///     green: f64,
+///     blue: f64
+/// }
+///
+/// assert_eq!(
+///     "(ddd)",
+///     Gamma::signature().to_string().as_str()
+/// );
+///
+/// ```
+///
+/// [`Arg`]: dbus::arg::Arg
+/// [`Get`]: dbus::arg::Get
+/// [`Append`]: dbus::arg::Append
 #[proc_macro_derive(DbusStruct, attributes(dbus_struct))]
 #[proc_macro_error]
 pub fn derive_dbus_struct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -30,6 +63,35 @@ pub fn derive_dbus_struct(input: proc_macro::TokenStream) -> proc_macro::TokenSt
     derive_struct(input).into()
 }
 
+/// Implements [`ArgAll`], [`ReadAll`] and [`AppendAll`] for an arbitrary struct.
+///
+/// # Examples
+/// ```
+/// use dbus_derive::DbusArgs;
+/// use dbus::arg::{ArgAll, PropMap};
+///
+/// // Taken from org.freedesktop.portal.Desktop OpenURI method.
+/// #[derive(DbusArgs)]
+/// struct OpenURIArgs {
+///     parent_window: String,
+///     uri: String,
+///     options: PropMap
+/// }
+///
+/// let mut openuri_signature = String::new();
+/// OpenURIArgs::strs_sig(("parent_window", "uri", "options"), |_, sig| {
+///     openuri_signature += &sig.to_string();
+/// });
+/// assert_eq!(
+///     "ssa{sv}",
+///     openuri_signature
+/// );
+///
+/// ```
+///
+/// [`ArgAll`]: dbus::arg::ArgAll
+/// [`ReadAll`]: dbus::arg::ReadAll
+/// [`AppendAll`]: dbus::arg::AppendAll
 #[proc_macro_derive(DbusArgs, attributes(dbus_args))]
 #[proc_macro_error]
 pub fn derive_dbus_args(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -46,6 +108,63 @@ pub fn derive_dbus_args(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     derive_args(input).into()
 }
 
+/// Implements [`Arg`], [`Get`] and [`Append`] for an enum that will behave like a different type.
+///
+/// Expects trait implementation of [`From<EnumType>`] for mapped type and
+/// [`TryFrom<MappedType>`] for enum type.
+///
+/// # Attributes
+/// * `#[dbus_enum(as_type = "u8")]`: Maps given enum to [`u8`]
+///
+/// # Examples
+/// ```
+/// use dbus_derive::DbusEnum;
+/// use dbus::arg::Arg;
+///
+/// // Taken from org.freedesktop.systemd1.Manager SystemState method.
+/// // Removed some options to keep example small.
+/// #[derive(DbusEnum, Clone, Copy)]
+/// #[dbus_enum(as_type = "String")]
+/// enum SystemdSystemState {
+///     Starting,
+///     Running,
+///     Stopping
+/// }
+///
+/// impl From<SystemdSystemState> for String {
+///     fn from(value: SystemdSystemState) -> Self {
+///         use SystemdSystemState::*;
+///         match value {
+///             Starting => "starting",
+///             Running => "running",
+///             Stopping => "stopping"
+///         }.to_string()
+///     }
+/// }
+///
+/// impl TryFrom<String> for SystemdSystemState {
+///     type Error = &'static str;
+///
+///     fn try_from(value: String) -> Result<Self, Self::Error> {
+///         use SystemdSystemState::*;
+///         match value.as_str() {
+///             "starting" => Ok(Starting),
+///             "running" => Ok(Running),
+///             "stopping" => Ok(Stopping),
+///             _ => Err("Unexpected system state")
+///         }
+///     }
+/// }
+///
+/// assert_eq!(
+///     "s",
+///     SystemdSystemState::signature().to_string().as_str()
+/// );
+/// ```
+///
+/// [`Arg`]: dbus::arg::Arg
+/// [`Get`]: dbus::arg::Get
+/// [`Append`]: dbus::arg::Append
 #[proc_macro_derive(DbusEnum, attributes(dbus_enum))]
 #[proc_macro_error]
 pub fn derive_dbus_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -62,6 +181,38 @@ pub fn derive_dbus_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     derive_enum(input).into()
 }
 
+/// Implements [`Arg`], [`Get`] and [`Append`] for a struct that behaves like [`PropMap`].
+///
+/// Can be derived for a struct where every field is an option, uses field name as a key for
+/// accessing [`PropMap`].
+///
+/// # Field attributes
+/// * `#[dbus_propmap(rename="key-name")]`: Overrides field name with given string for accessing
+/// [`PropMap`].
+///
+/// # Examples
+/// ```
+/// use dbus_derive::DbusPropMap;
+/// use dbus::arg::Arg;
+///
+/// // Taken from org.freedesktop.Flatpak.SessionHelper RequestSession method.
+/// #[derive(DbusPropMap)]
+/// struct FlatpakRequestSessionReturn {
+///     path: Option<String>,
+///     #[dbus_propmap(rename="pkcs11-socket")]
+///     pkcs11_socket: Option<String>
+/// }
+///
+/// assert_eq!(
+///     "a{sv}",
+///     FlatpakRequestSessionReturn::signature().to_string().as_str()
+/// );
+/// ```
+///
+/// [`Arg`]: dbus::arg::Arg
+/// [`Get`]: dbus::arg::Get
+/// [`Append`]: dbus::arg::Append
+/// [`PropMap`]: dbus::arg::PropMap
 #[proc_macro_derive(DbusPropMap, attributes(dbus_propmap))]
 #[proc_macro_error]
 pub fn derive_dbus_propmap(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
